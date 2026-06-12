@@ -1,0 +1,208 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Claude.ai-inspired palette: warm paper light theme, charcoal dark theme,
+   terracotta accent. Exposed as utilities via @theme. */
+@theme {
+  --color-paper: #faf9f5;
+  --color-surface: #ffffff;
+  --color-sunken: #f0eee6;
+  --color-ink: #3d3929;
+  --color-faint: #87867f;
+  --color-line: #e8e6dc;
+  --color-clay: #d97757;
+  --color-clay-deep: #c2563a;
+
+  --color-paper-dark: #262624;
+  --color-surface-dark: #30302e;
+  --color-sunken-dark: #1f1e1d;
+  --color-ink-dark: #f0efea;
+  --color-faint-dark: #a3a094;
+  --color-line-dark: #3e3d39;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-paper text-ink dark:bg-paper-dark dark:text-ink-dark;
+  overscroll-behavior-y: none;
+}
+
+/* Subtle scrollbars that match the theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(135, 134, 127, 0.35) transparent;
+}
+
+/* Markdown body inside messages. */
+.md {
+  line-height: 1.65;
+  word-break: break-word;
+}
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4 { font-weight: 600; margin: 0.8em 0 0.4em; }
+.md h1 { font-size: 1.3em; }
+.md h2 { font-size: 1.18em; }
+.md h3 { font-size: 1.08em; }
+.md p { margin: 0.4em 0; }
+.md ul, .md ol { margin: 0.4em 0; padding-left: 1.4em; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md a { @apply text-clay underline underline-offset-2; }
+.md blockquote { @apply border-l-2 border-clay/50 pl-3 text-faint dark:text-faint-dark; margin: 0.5em 0; }
+.md code:not(pre code) {
+  @apply bg-sunken dark:bg-sunken-dark rounded px-1.5 py-0.5 text-[0.88em];
+}
+.md pre {
+  @apply bg-sunken dark:bg-sunken-dark rounded-xl p-3 text-[0.86em] overflow-x-auto;
+  margin: 0.5em 0;
+}
+.md table { border-collapse: collapse; margin: 0.5em 0; }
+.md th, .md td { @apply border border-line dark:border-line-dark px-2 py-1; }
+.md img { max-width: 100%; border-radius: 0.5rem; }
+.md hr { @apply border-line dark:border-line-dark; margin: 0.8em 0; }
+
+/* highlight.js theme, tuned for both palettes. */
+.hljs-comment, .hljs-quote { color: #8b8878; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag { color: #c2563a; }
+.hljs-string, .hljs-attr { color: #7d8a4e; }
+.hljs-number, .hljs-literal { color: #b0762d; }
+.hljs-title, .hljs-name { color: #5e7ba6; }
+.hljs-built_in, .hljs-type { color: #8464a8; }
+.dark .hljs-comment, .dark .hljs-quote { color: #8f8d83; }
+.dark .hljs-keyword, .dark .hljs-selector-tag { color: #e08b6d; }
+.dark .hljs-string, .dark .hljs-attr { color: #a8b87a; }
+.dark .hljs-number, .dark .hljs-literal { color: #d9a05c; }
+.dark .hljs-title, .dark .hljs-name { color: #8fadd6; }
+.dark .hljs-built_in, .dark .hljs-type { color: #b294d6; }
+
+@keyframes flash-highlight {
+  0%, 30% { background-color: rgba(217, 119, 87, 0.18); }
+  100% { background-color: transparent; }
+}
+.anchor-flash {
+  animation: flash-highlight 2.5s ease-out forwards;
+  border-radius: 1rem;
+}
+
+/* Word-style search highlight (CSS Custom Highlight API). All matches get the
+   yellow wash; the focused result gets the accent wash. */
+::highlight(search-match) {
+  background-color: rgba(250, 204, 21, 0.4);
+}
+::highlight(search-active) {
+  background-color: rgba(217, 119, 87, 0.6);
+  color: #fff;
+}
+.dark ::highlight(search-match) {
+  background-color: rgba(202, 138, 4, 0.45);
+}
+
+/* ---- Motion library ---- */
+
+/* New message slides up into place. */
+@keyframes msg-in {
+  from { opacity: 0; translate: 0 14px; scale: 0.97; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+.msg-in { animation: msg-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Modal / popover entrance. */
+@keyframes pop-in {
+  from { opacity: 0; translate: 0 10px; scale: 0.95; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+.pop-in { animation: pop-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in { animation: fade-in 0.2s ease-out both; }
+
+/* Lightbox media entrance. */
+@keyframes zoom-in {
+  from { opacity: 0; scale: 0.92; }
+  to { opacity: 1; scale: 1; }
+}
+.zoom-in { animation: zoom-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Page-level entrance for onboarding / empty states. */
+@keyframes rise-in {
+  from { opacity: 0; translate: 0 24px; }
+  to { opacity: 1; translate: 0 0; }
+}
+.rise-in { animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Gentle idle float for hero icons. */
+@keyframes float-y {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -8px; }
+}
+.float-y { animation: float-y 3.5s ease-in-out infinite; }
+
+/* Error shake. */
+@keyframes shake-x {
+  10%, 90% { translate: -1px 0; }
+  20%, 80% { translate: 2px 0; }
+  30%, 50%, 70% { translate: -3px 0; }
+  40%, 60% { translate: 3px 0; }
+}
+.shake-x { animation: shake-x 0.45s ease-in-out both; }
+
+/* Moving sheen across active progress bars. */
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+.bar-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Breathing dashed border for the drop overlay. */
+@keyframes drop-pulse {
+  0%, 100% { scale: 1; box-shadow: 0 0 0 0 rgba(217, 119, 87, 0.35); }
+  50% { scale: 1.02; box-shadow: 0 0 0 14px rgba(217, 119, 87, 0); }
+}
+.drop-pulse { animation: drop-pulse 1.6s ease-in-out infinite; }
+
+/* Smooth palette swap when toggling theme. */
+html.theme-anim,
+html.theme-anim body,
+html.theme-anim * {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.35s ease !important;
+}
+
+/* Staggered entrance helpers (cards, list rows). */
+.stagger > * { animation: msg-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.stagger > :nth-child(1) { animation-delay: 0.03s; }
+.stagger > :nth-child(2) { animation-delay: 0.07s; }
+.stagger > :nth-child(3) { animation-delay: 0.11s; }
+.stagger > :nth-child(4) { animation-delay: 0.15s; }
+.stagger > :nth-child(5) { animation-delay: 0.19s; }
+.stagger > :nth-child(6) { animation-delay: 0.23s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-in, .pop-in, .fade-in, .zoom-in, .rise-in, .float-y,
+  .shake-x, .drop-pulse, .stagger > *, .anchor-flash {
+    animation: none !important;
+  }
+  .bar-shimmer::after { animation: none; content: none; }
+}
