@@ -12,26 +12,55 @@
 
 ### 方式一：Docker（推荐）
 
+**1. 克隆仓库**
+
 ```bash
-git clone <repo> lanshare && cd lanshare
-cp .env.example .env        # 编辑 .env，把 TOKEN 改成自己的长随机串
+git clone https://github.com/TabBook/lanshare.git && cd lanshare
+```
+
+**2. 配置访问令牌**
+
+```bash
+cp .env.example .env
+openssl rand -hex 16        # 生成一个随机串，填进 .env 的 TOKEN=
+```
+
+`.env` 内容只有一行 `TOKEN=...`，compose 启动时会自动读取。这个文件含密钥，已被 `.gitignore` 排除，不会被提交。
+
+**3. 构建并启动**
+
+```bash
 docker compose up -d
 ```
 
-镜像从 scratch 构建，最终只含一个静态二进制（约 17MB）。数据通过 `./data` 目录挂载持久化，**备份该目录即完整备份**；`restart: unless-stopped` 保证开机自启。
+首次会自动完成三阶段构建（Node 编译前端 → Go 编译后端 → scratch 打包），最终镜像只含一个静态二进制（约 17MB）。启动后打开 `http://<主机IP>:10088`，输入 TOKEN 即可。
 
-不用 compose 也可以直接 run：
+**常用操作**
 
 ```bash
-docker build -t lanshare .
+docker compose logs -f          # 看日志
+docker compose restart          # 重启
+docker compose down             # 停止（数据在 ./data，不会丢）
+git pull && docker compose up -d --build   # 更新到新版本
+tar czf backup.tar.gz data/     # 备份（data 目录就是全部数据）
+```
+
+**改端口**：编辑 `docker-compose.yml` 的 `ports`，比如想用 9000 对外：改成 `"9000:10088"` 即可，容器内端口不用动。
+
+**离线安装**（无法访问构建源时）：从 [Releases](../../releases) 下载镜像包，
+
+```bash
+docker load -i lanshare-v1.0.0-docker-image-amd64.tar.gz
 docker run -d --name lanshare --restart unless-stopped \
   -p 10088:10088 -e TOKEN=<你的令牌> -e TZ=Asia/Shanghai \
-  -v ./data:/data lanshare
+  -v ./data:/data lanshare:latest
 ```
 
 ### 方式二：直接部署（裸二进制）
 
 零运行时依赖：纯 Go + 内嵌 SQLite（无 CGO）+ go:embed 前端，编译产物是一个约 12MB 的静态二进制，复制到任何同架构 Linux 机器即可运行。
+
+可以直接从 [Releases](../../releases) 下载现成的 linux-amd64 二进制（跳过下面的构建步骤），或自行构建：
 
 ```bash
 # 构建（需 Node 22+ 与 Go 1.26+）
@@ -64,14 +93,36 @@ WantedBy=multi-user.target
 systemctl enable --now lanshare
 ```
 
+## 配置说明
+
+### 访问令牌（TOKEN）
+
+整站只有这一道门：TOKEN 相当于全站密码，知道它的设备才能读写消息和文件，所以**务必用长随机串**（推荐 `openssl rand -hex 16` 生成），不要用 `123456` 这类弱口令——尤其当你做了端口转发、局域网外也能访问时。
+
+- 浏览器首次打开会要求输入 TOKEN 并给设备起名，之后凭证存在本地，不用每次输
+- 更换 TOKEN：改 `.env` 后 `docker compose up -d`，所有设备会回到登录页重新输入新令牌，已有聊天记录不受影响
+- API 调用时通过 `Authorization: Bearer <token>` 头携带；文件下载链接和 WebSocket 也接受 `?token=` 查询参数（方便 aria2/IDM 这类外部下载器）
+
+### 配置文件
+
+| 文件 | 作用 |
+|---|---|
+| `.env` | 存放 TOKEN（从 `.env.example` 复制），含密钥、不入库 |
+| `.env.example` | TOKEN 配置模板 |
+| `docker-compose.yml` | Docker 部署定义：端口映射、环境变量、`./data` 数据挂载、开机自启策略 |
+| `Dockerfile` | 三阶段构建：Node 编译前端 → Go 编译静态二进制 → scratch 打包 |
+| `.dockerignore` / `.gitignore` | 确保运行数据（`data/`）和密钥（`.env`）不进镜像、不进仓库 |
+
+除 TOKEN 外没有别的配置文件，其余全部通过环境变量调整：
+
 ### 环境变量
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `TOKEN` | （必填） | 访问令牌，所有请求凭它准入 |
+| `TOKEN` | （必填） | 访问令牌，见上文 |
 | `DATA_DIR` | `/data` | 数据目录（SQLite + 文件），备份它即完整备份 |
-| `MAX_STORAGE` | `50GB` | 存储上限；超出后从最旧的文件消息删起，文本永不自动删 |
-| `PORT` | `10088` | 监听端口 |
+| `MAX_STORAGE` | `50GB` | 存储上限；超出后从最旧的文件消息删起，文本永不自动删。支持 `500MB`/`2GB`/`1TB` 写法 |
+| `PORT` | `10088` | 监听端口（Docker 部署一般改 compose 的端口映射即可，不用动它） |
 | `TZ` | 系统时区 | "跳转到日期"按此时区解析（二进制已内嵌 tzdata，scratch 容器中也生效） |
 
 ### 数据目录结构
@@ -83,6 +134,38 @@ systemctl enable --now lanshare
 ├── thumbs/                   # 缩略图（可整目录删除，会按需重建）
 └── tmp/                      # 上传分块暂存（48h 自动清理）
 ```
+
+## 项目结构
+
+```
+.
+├── main.go               # 入口：读环境变量、装配路由、优雅退出
+├── static.go             # 静态资源服务：预压缩 .gz、hash 文件名 immutable 缓存
+├── api/                  # HTTP 层（标准库 net/http，无框架）
+│   ├── api.go            #   路由注册、Bearer 鉴权中间件、JSON 工具
+│   ├── messages.go       #   时间线分页 / 搜索 / 日期锚点 / 发文本 / 删除
+│   ├── uploads.go        #   分块上传：初始化、收块、续传查询、合并
+│   ├── files.go          #   文件下载（Range/ETag）与缩略图
+│   ├── devices.go        #   设备注册 / 改名 / 移除
+│   └── ws.go             #   WebSocket hub，推送新消息 / 删除事件
+├── store/                # 数据层（SQLite，modernc 纯 Go 驱动，无 CGO）
+│   ├── store.go          #   建库建表、WAL、单写多读连接、自动清理
+│   ├── messages.go       #   消息查询 / 搜索（LIKE，预留 FTS5 切换点）
+│   ├── uploads.go        #   分块落盘、位图记录、合并校验
+│   └── devices.go        #   设备表
+├── thumb/                # 服务端缩略图生成（纯 Go 图像解码）
+├── web/                  # 前端（React 19 + Vite + Tailwind 4）
+│   ├── src/App.jsx       #   布局：侧边栏 + 时间线 + 输入框
+│   ├── src/useTimeline.js#   数据引擎：双向 keyset 分页、锚点窗口、WS 去重合并
+│   ├── src/upload.js     #   分块并发上传 + localStorage 断点续传指纹
+│   ├── src/components/   #   时间线、消息气泡、图片网格、灯箱、搜索结果等
+│   └── embed.go          #   go:embed 把 dist 打进二进制
+├── e2e/                  # Puppeteer 端到端测试（虚拟滚动、上传续传、搜索、PWA）
+├── Dockerfile            # 三阶段构建 → scratch 镜像
+└── docker-compose.yml    # 推荐部署方式
+```
+
+前后端各自只有一层抽象：`api` 只管 HTTP 进出，`store` 只管数据，前端组件只消费 `useTimeline`。改任何一层基本不用动另外两层。
 
 ## API 简表
 
