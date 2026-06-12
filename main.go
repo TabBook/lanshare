@@ -18,10 +18,6 @@ import (
 )
 
 func main() {
-	token := os.Getenv("TOKEN")
-	if token == "" {
-		log.Fatal("TOKEN environment variable is required")
-	}
 	dataDir := envOr("DATA_DIR", "/data")
 	port := envOr("PORT", "10088")
 	maxStorage, err := parseSize(envOr("MAX_STORAGE", "50GB"))
@@ -34,6 +30,18 @@ func main() {
 		log.Fatalf("open store: %v", err)
 	}
 	defer st.Close()
+
+	// 令牌来源优先级：TOKEN 环境变量 > 此前网页设置（settings 表）> 都没有
+	// 则进入首次运行模式，第一个打开网页的人完成设置。
+	token := os.Getenv("TOKEN")
+	if token == "" {
+		if token, err = st.GetSetting("token"); err != nil {
+			log.Fatalf("read token setting: %v", err)
+		}
+	}
+	if token == "" {
+		log.Print("TOKEN 未设置：首次打开网页时将引导设置访问令牌")
+	}
 
 	srv := api.NewServer(st, token, maxStorage)
 	mux := http.NewServeMux()

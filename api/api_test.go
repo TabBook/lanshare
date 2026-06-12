@@ -200,3 +200,84 @@ func TestMessagesAndDevices(t *testing.T) {
 		t.Fatalf("stats after delete: %+v", stats)
 	}
 }
+
+// 首次运行模式：无令牌时仅 /api/setup 可用，网页设置后立即生效并持久化。
+func TestWebSetup(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	srv := NewServer(st, "", 1<<40) // 空令牌 = 进入设置模式
+	mux := http.NewServeMux()
+	srv.Routes(mux)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+
+	get := func(path, bearer string) *http.Response {
+		r, _ := http.NewRequest("GET", ts.URL+path, nil)
+		if bearer != "" {
+			r.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		resp, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	post := func(body string) *http.Response {
+		resp, err := http.Post(ts.URL+"/api/setup", "application/json", bytes.NewReader([]byte(body)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	var status struct{ Needed bool `json:"needed"` }
+	resp := get("/api/setup", "")
+	json.NewDecoder(resp.Body).Decode(&status)
+	if !status.Needed {
+		t.Fatal("setup should be needed before a token exists")
+	}
+	if resp := get("/api/stats", "anything"); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("pre-setup auth: %d, want 401", resp.StatusCode)
+	}
+	if resp := post(`{"token":"short"}`); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("short token: %d, want 400", resp.StatusCode)
+	}
+	if resp := post(`{"token":"my-new-token"}`); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("setup: %d, want 204", resp.StatusCode)
+	}
+	if resp := post(`{"token":"another"}`); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("second setup: %d, want 409", resp.StatusCode)
+	}
+	resp = get("/api/setup", "")
+	json.NewDecoder(resp.Body).Decode(&status)
+	if status.Needed {
+		t.Fatal("setup should not be needed after configuration")
+	}
+	if resp := get("/api/stats", "my-new-token"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("auth with web-set token: %d, want 200", resp.StatusCode)
+	}
+	// 持久化：新 Server 实例（模拟重启）按 main.go 的方式从 settings 读回。
+	saved, err := st.GetSetting("token")
+	if err != nil || saved != "my-new-token" {
+		t.Fatalf("persisted token = %q, %v", saved, err)
+	}
+}
+
+// 环境变量固定令牌时，setup 不可用也不需要。
+func TestSetupDisabledWithEnvToken(t *testing.T) {
+	ts, _ := newTestServer(t)
+	var status struct{ Needed bool `json:"needed"` }
+	resp, _ := http.Get(ts.URL + "/api/setup")
+	json.NewDecoder(resp.Body).Decode(&status)
+	if status.Needed {
+		t.Fatal("setup must not be needed when a token is configured")
+	}
+	resp, _ = http.Post(ts.URL+"/api/setup", "application/json",
+		bytes.NewReader([]byte(`{"token":"override-attempt"}`)))
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("setup with env token: %d, want 409", resp.StatusCode)
+	}
+}

@@ -89,7 +89,29 @@ CREATE TABLE IF NOT EXISTS uploads (
   chunk_size      INTEGER NOT NULL,
   received_bitmap BLOB,
   created_at      INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );`)
+	return err
+}
+
+// GetSetting returns "" (no error) when the key is absent.
+func (s *Store) GetSetting(key string) (string, error) {
+	var v string
+	err := s.readDB.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return v, err
+}
+
+func (s *Store) SetSetting(key, value string) error {
+	_, err := s.writeDB.Exec(
+		`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+		key, value)
 	return err
 }
 
