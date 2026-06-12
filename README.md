@@ -25,7 +25,6 @@ cp .env.example .env
 openssl rand -hex 16        # 生成一个随机串，填进 .env 的 TOKEN=
 ```
 
-`.env` 内容只有一行 `TOKEN=...`，compose 启动时会自动读取。这个文件含密钥，已被 `.gitignore` 排除，不会被提交。
 
 **3. 构建并启动**
 
